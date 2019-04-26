@@ -52,7 +52,7 @@ Elixir is a ***garbage-collection language.***
 
 
 
-## Organizing your code
+## 2.3 Organizing your code
 
 ### 2.3.1 Modules
 
@@ -456,4 +456,127 @@ database_value = connection_established? && read_data
 ```
 
 In both examples, short-circuit operators make it possible to write concise code without resorting to complicated nested conditional constructs.
+
+### 2.4.3 Tuples
+
+Tuples are something like untyped structures, or records, and they're most often used to group a fixed number or elements together.
+
+```elixir
+person = {"Bob", 25}
+age = elem(person, 1) #age is 25
+put_elem(person,1 ,26) #{"Bob", 26}
+```
+
+***The function put_elem doesn't modify the tuple. It returns the new version, keeping the old one intact.***
+
+- Recall that data in ***Elixir is immutable***, so you can’t do an in-memory modification of a value.
+
+> Elixir is immutable but it looks mutable(can overwrite: exactly overwrite-like)
+
+```elixir
+iex(1)> person
+{"Bob", 25}	#person is not changed
+
+older_person = put_elem(person, 1, 26)
+#older_person is {"Bob", 26}
+iex(2)> person = put_elem(person, 1, 26)
+iex(3)> person
+{"Bob", 26}
+#Variable rebound to the new memory location
+#The old location is not referenced by any other variable, so it is eligible for garbage
+#-> delete last one and allocate again(overwrite-like)
+```
+
+
+
+### 2.4.4 Lists
+
+Lists in Erlang are used to manage dynamic, variable-sized collections of data, The syntax deceptively resembles arrays form other languages.
+
+```elixir
+iex(1)> prime_numbers =[2, 3, 5, 7]
+iex(2)> Enum.at(prime_numbers, 3) # return 7
+```
+
+Lists may look like arrays, but they work like singly linked lists. To do something with the list, you have to traverse it.
+
+> indexing list is O(N) So it is later than array. But list is easier to put data then array
+
+
+
+```elixir
+#"in" operator
+iex(3)> 5 in prime_numbers # return false
+iex(4)> List.replace_at(prime_numbers, 0, 11)
+[11, 3, 5, 7]
+#prime_numbers is still [2, 3, 5, 7]
+iex(5)> new_primes = List.replace_at(prime_numbers, 0, 11)
+or
+iex(5)> prime_numbers = List.replace_at(prime_numbers, 0, 11)
+```
+
+insert a new element at the specified position with the *List.insert_at*
+
+```elixir
+iex(6)> List.insert_at(prime_numbers, 3, 13)
+[11, 3, 5, 13, 7]
+```
+
+***To append to the end, you can use a negative value for the insert position***
+
+```go
+iex(7)> List.insert_at(prime_numbers, -1, 13)
+[11, 3, 5, 7, 13]
+iex(8)> [1, 2, 3] ++ [4, 5]
+[1, 2, 3, 4, 5]
+```
+
+In general, ***you should avoid adding elements to the end of a list.*** Lists are most efficient when new elements are pushed to the top, or popped from it. To understand why, let’s look at the recursive nature of lists.
+
+#### Recursive List Definition
+
+In elixir, There is a special syntax to support recursive list definition
+
+```elixir
+a_list [head|tail]
+```
+
+- ***head can be any type of data,***
+- whereas ***tail is itself a list***. If *tail* is an empty list, it indicates the end of the entire list.
+
+```elixir
+iex(1)> [1 | []]
+[1]
+iex(2)> [1 | [2 | []]]
+[1, 2]
+iex(3)> [1 | [2]]
+[1, 2]
+iex(4)> [1 | [2, 3, 4]]
+[1, 2, 3, 4]
+#Canonical recursive
+iex(5)> [1 | [2 | [3 | [4 | []]]]]
+[1, 2, 3, 4]
+```
+
+Of course, nobody wants to write constructs like this one. ***But it’s important that you’re always aware that, internally, lists are recursive structures of (head, tail ) pairs.***
+
+To get the head of the list, you can use the hd function. The tail can be obtained by calling the tl function:
+
+```elixir
+iex(1)> hd([1, 2, 3, 4])
+1
+iex(2)> tl([1, 2, 3, 4])
+[2, 3, 4]
+iex(3)> a = [1]
+iex(4)> tl(a)
+[]
+iex(5)> tl(a)
+1	#Not a list but data
+```
+
+Both operations are O(1), because they amount to reading one or the other value from the (head, tail ) pair.
+
+***Construction of the new_list is an O(1) operation***
+
+### 2.4.5 immutabllity
 

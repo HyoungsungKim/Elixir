@@ -578,5 +578,219 @@ Both operations are O(1), because they amount to reading one or the other value 
 
 ***Construction of the new_list is an O(1) operation***
 
-### 2.4.5 immutabllity
+### 2.4.5 immutability
 
+As has been mentioned before, Elixir data cannot be mutated, ***Every function returns the new, modified version of the input data.*** You have to take the new version into another variable or rebind it to the same symbolic name. In any case, the result resides in another memory location. ***The modification of the input will result in some data copying,*** but generally, ***most of the memory will be shared between the old and the new version.***
+
+#### Modifying Tuples
+
+A modified tuple is always a complete, ***shallow copy of the old version.*** 
+
+```elixir
+a_tuple = {a, b, c}
+new_tuple = put_elem(a_tuple, 1, b2)
+```
+
+The variable *new_tuple* will contain a shallow copy of *a_tuple)
+
+>  New element *b2* is added in memory and ***new_tuple shares same a and c  with a_tuple*** and reference *b2*
+
+***What happens if you rebind a variable?***
+In this case, after rebinding, the variable *a_tuple* references another memory location. ***The old location of a_tuple is not accessible and is available for garbage collection***
+
+***Keep in mind that tuples are always copied, but the copying is shallow. Lists, however, have different properties.***
+
+#### Modifying lists
+
+*When you modify the nth element of a list*, the new version will contain ***shallow copies of the first n-1 elements,*** followed by the modified element. ***After that, the tails are completely shared.***
+
+> shallow copy from begin to n -1 index, and share last elements
+
+This is precisely why adding elements to the end of a list is *expensive*. To append a new element at the tail, you have to iterate and (shallow) copy the entire list.
+
+In contrast, ***pushing an element to the top of a list doesn't copy anything which makes it the least expensive operation.***
+
+#### Benefits
+
+Immutability may seem strange, and you may wonder about its purpose. There are two important benefits of immutability
+
+- Side-effect-free functions
+- Data consistency.
+
+Given that data can’t be mutated, you can treat most functions as side-effect-free transformations. They take an input and return a result. More complicated programs are written by combining simpler transformations:
+
+```elixir
+#pipe operator : pass a result to the next function as first argument
+def complex_transformation(data) do
+    data
+    |> transformation_1(..)
+    |> transformation_2(..)
+    |> transformation_3(..)
+    ....
+    |> transformation_n(..)
+end
+```
+
+This code relies on the previously mentioned pipeline operator that chains two functions together, feeding the result of the previous call as the first argument of the next call.
+
+***Elixir is not a pure functional language, so functions may still have side effects.*** For example, a function may write something to a file and issue a database or network call, which cause it to produce a side-effect
+
+-> But you can be certain that a function will not modify the value of any variable.
+
+```elixir
+def complex_transformation(original_data) do
+    original_data
+    |> transformation_1(...)
+    |> transformation_2(...)
+    ...
+end
+```
+
+***If something goes wrong, the function complex_transformation can return original_data,*** which will effectively roll back all of the transformations performed in the function. ***This is possible because none of the transformations modifies the memory occupied by original_data***
+
+### 2.4.6 Maps
+
+A map is a key/value store, where keys and values can be any term. ***maps have dual usage in Elixir.***
+
+- They are used to power ***dynamically sized key/value structures***
+- But they are also used to manage ***simple records-a couple of well-defined names fields bundled together.***
+
+#### Dynamically sized maps
+
+An empty map can be created with the %{} construct:
+
+```elixir
+iex(1)> empty_map = %{}
+```
+
+A map with some values can be created with the following syntax:
+
+```elixir
+iex(2)> squares = %{1 => 1, 2=> 4, 3=> 9}
+```
+
+you can also prepolulate a map with the *Map.new/1* function. The function takes an enumerable where each elements is a tuple of size two (a pair)
+
+> populate : 거주하다
+
+```elixir
+iex(3)> squares = Map.new([{1,1}, {2,4}, {3,9}])
+%{1 => 1, 2 => 4, 3 => 9}
+##function(list[atom{}])
+iex(4)>squares[2]
+4
+iex(5)>squares[4]
+nil
+```
+
+In the second expression, you get a *nil* because no value is associated with the given key.
+
+A similar result can be obtained with *Map.get/3*.  ***But Map.get/3 allows you to specify the default value.***, which is returned if the key is not found. ***If this default is not provided, nil will be returned.***
+
+```elixir
+iex(6)> Map.get(squares, 2)
+4
+iex(7)> Map.get(squares, 4)
+nil
+iex(8) Map.get(squares, 4, :not_found)
+:not_found
+#":not_found" is used as default value
+```
+
+If you want to precisely distinguish between there cases, you can use *Map.fetch/2*
+
+```elixir
+iex(9)> Map.fetch(squares, 2)
+{:ok, 4}
+iex(10)> Map.fetch(squares, 4)
+:error
+```
+
+> fetch : (어디를 가서) 가지고 오다, (특정 가격에) 팔리다
+>
+> patch : 패치, (구멍 난데를 때우는)조각
+
+Sometimes you want to proceed only if the key is in the map, and raise an exception otherwise. This can be done with the *Map.fetch!/2* function.
+
+```elixir
+iex(11)> Map.fetch!(squares, 2)
+4
+iex(12)> Map.fetch!(squares, 4)
+** (KeyError) ~
+```
+
+To store new element to the map, Map.put/3
+
+```elixir
+iex(13)> squares = Map.put(squares, 4, 16)
+%{1 => 1, 2=> 4, 3=> 9, 4=> 16}
+iex(14)> squares[4]
+16
+```
+
+For more [information](https://hexdocs.pm/elixir/Map.html)
+
+***A map is also enumerable, which means that all the functions from the Enum module can work with maps.***
+
+#### Structured Data
+
+Maps are the go-to type for managing key/value data structures of an arbitrary size. ***But they're also frequently used in Elixir to combine a couple of fields into a single structure.***
+
+This use case somewhat overlaps that of tuples, but it provides the advantage of allowing you to access field by name.
+
+```elixir
+#key => variable
+iex(1)>bob = %{:name => "Bob", :age => 25, :work_at => "Initech"}
+#if Keys are atom you can write this(same)
+iex(2)>bob = %{name: "Bob", age: 25, work_at: "Initech"}
+```
+
+To retrive a field, you can use the []operator
+
+> Atom constants start with a colon character, followed by a combination of alphanumerics and/or underscore character.
+>
+> Ex) :hello, :"atom is here", :blockchain
+>
+> retrieve : 검색하다.
+
+```elixir
+iex(3)>bob[:works_at]
+"Initech"
+iex(4)bob[:non_existent_field]
+nil
+```
+
+Atom keys again receive special syntax treatment
+
+```elixir
+iex(5)> bob.age
+25
+iex(6)bob.non_existent_field
+** (KeyError) key :~
+```
+
+To change a field value, 
+
+```elixir
+#Original data : %{name: "Bob", age: 25, work_at: "Initech"}
+iex(7)> next_years_bob = %{bob | age:26}
+%{name: "Bob", age: 26, work_at: "Initech"}
+#Multiple attributes as well
+iex(8) %{bob | age:26, works_at: "initrode"}
+%{name: "Bob", age: 26, work_at: "initrode"}
+```
+
+***But you can only modify values that already exist in the map.*** If you mistype the field name, you will get an immediate runtime error:
+
+```elixir
+iex(9)> %{bob | works_in: "Initech"}
+** (KeyError) ~
+```
+
+***Using maps to hold structured data is a frequent pattern in Elixir***  The common pattern is to provide all the fields while creating the map, using atoms as keys. If the value for some field is not available, you can set ti to nil. to fetch a desired field, you can use the *a_map.some_field*
+
+also can use Map module, such as *Map.put/3* or *Map.feetch/2*  But ***This function is usually suitable for the case where maps are used to manage a dynamically sized key/value structure.***
+
+
+
+### 2.4.7 Binaries and bitstrings

@@ -793,4 +793,3 @@ also can use Map module, such as *Map.put/3* or *Map.feetch/2*  But ***This func
 
 
 
-### 2.4.7 Binaries and bitstrings

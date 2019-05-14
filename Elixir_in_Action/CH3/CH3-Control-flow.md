@@ -214,3 +214,273 @@ When you write "ping " <> url = command, you state the expectation that a comman
 
 ### 3.1.8 Compound matches
 
+Patterns can be arbitrarily nested, as in the following contrived example:
+
+```elixir
+iex(1)> [_, {name, _}, _] = [{"Bob", 25}, {"Alice", 30}, {"John", 35}]
+```
+
+Another interesting feature is match chaining.
+
+```elixir
+#pattern = expression
+iex(2)> a = 1 + 3
+4
+iex(3)> a = (b = 1 + 3)
+4
+#elegance example
+iex(4)> date_time = {_, {hour, _, _}} = :calaendar.local_time()
+```
+
+## 3.2 Matching with functions
+
+The pattern-matching mechanism is used in the specification of function arguments.
+
+```elixir
+defmodule Rectangle do
+    def area({a,b}) do
+        a * b
+    end
+end
+```
+
+### 3.2.1 Multiclause functions
+
+Elixir allows you to overload a function by specifying multiple clauses. If you provide multiple definitions of the same function with the same arity, it’s said that the function has multiple clauses
+
+```elixir
+defmodule Geometry do
+    def area({:rectangle, a, b}) do
+        a * b
+    end
+
+    def area({:square, a}) do
+        a * a
+    end
+
+    def area({:circle, r}) do
+        r * r * 3.14
+    end
+end
+```
+
+Same area function but pattern is different
+
+Recall from chapter 2 that you can create a function value with the capture operator, &:
+
+```elixir
+&Module.fun/arity
+iex(1) fun = &Geometry.area/1
+iex(2)fun.({:circle, 4})
+50.24
+```
+
+Notice that the area(unknown) clause works only for area/1. If you pass more than one argument, this clause won’t be called. 
+
+```elixir
+iex(2)> Geometry_invalid_input.area({:triangle, 1, 2,3})
+{:error, {:unknown_shape, {:triangle, 1, 2, 3}}}
+iex(3)> Geometry_invalid_input.area({:triangle,:circle})
+{:error, {:unknown_shape, {:triangle, :circle}}}
+iex(4)> Geometry_invalid_input.area({:triangle,:circle}, {:hi})
+** (UndefinedFunctionError) function Geometry_invalid_input.area/2 is undefined or private. Did you mean one of:
+	* area/1
+Geometry_invalid_input.area({:triangle, :circle}, {:hi})
+```
+
+***One final note: you should always group clauses of the same function together, instead of scattering them in various places in the module. ***
+
+### 3.2.2 Guards
+
+Let’s say you want to write a function that accepts a number and returns an atom *:negative*, *:zero*, or *:positive*, depending on the number’s value. ***Elixir gives you a solution for this in the form of guards.***
+
+```elixir
+defmodule TestNum do
+    def test(x) whem x < 0 do
+        :negative
+    end
+
+    def test(0), do: :zero
+    
+    #Same with
+    #def test(0) do
+    #	:zero
+    #end
+    
+    def test(x) when x > 0 do
+        :postive
+    end
+end
+
+```
+
+The guard is a logical expression that places further conditions on a clause. The first clause will be called only if you pass a negative number, and the last one will be called only if you pass a positive number, as demonstrated in this shell session:
+
+```elixir
+iex(4)> TestNum.test('a')
+:postive
+```
+
+The explanation lies in the fact that Elixir terms can be compared with the operators < and >, even if they’re not of the same type. In this case, the type ordering determines the result:
+
+```elixir
+#Guards ver
+#is_number(x)
+defmodule TestNum do
+    def test(x) when is_number(x) and x < 0 do
+        :negative
+    end
+
+    def test(0), do: :zero
+
+    def test(x) when is_number(x) and x > 0 do
+        :postive
+    end
+end
+```
+
+***If an error is raised from inside the guard, it won’t be propagated, and the guard expression will return false***
+
+### 3.2.3 Multiclause lambdas
+
+Anonymous functions (lambdas) may also consist of multiple clauses.
+
+```elixir
+iex(1)> double = fn x -> x*2 end
+iex(2)> double.(3)
+6
+```
+
+The general lambda syntax has the following shape:
+
+```elixir
+fn
+    pattern_1, pattern_2 -> 
+    	...
+    pattern_3, pattern_4 ->
+    	...
+...
+end
+```
+
+```elixir
+#Reimplement using lambda
+iex(1)> test_num = 
+fn
+	x when is_number(x) and x < 0 ->
+		:negative	
+	0-> :zero	
+	x when is_number(x) and x > 0 -> 
+		:postive
+end
+iex(26)> test_num.(1)
+:postive
+iex(27)> test_num.(-1)
+:negative
+iex(28)> test_num.(0)
+:zero
+iex(29)> test_num.("Hello world")
+** (FunctionClauseError) no function clause matching in :erl_eval."-inside-an-interpreted-fun-"/1
+    The following arguments were given to :erl_eval."-inside-an-interpreted-fun-"/1:
+        # 1
+        "Hello world"
+iex(29)> test_num.(:atom)
+** (FunctionClauseError) no function clause matching in :erl_eval."-inside-an-interpreted-fun-"/1
+    The following arguments were given to :erl_eval."-inside-an-interpreted-fun-"/1:
+        # 1
+        :atom
+```
+
+***Notice that there’s no special ending terminator for a lambda clause***  The clause ends when the new clause is started (in the form pattern →) or when the lambda definition is finished with end.
+
+## 3.3 Conditionals
+
+### 3.3.1 Branching with multiclause functions
+
+```elixir
+defmodule TestNum do
+    def test(x) when x < 0, do: :negative
+    def test(0), do: : zero
+    def test(x), do: :postive
+end
+#def name(parameter) condition, do
+#...
+#end
+```
+
+In the following example, a multiclause is used to test whether a given list is empty:
+
+```elixir
+defmodule TestList do
+def empty?([]), do: :true
+def empty?([_|_]). do: :false
+end
+
+iex(31)> TestList.empty?([])
+true
+iex(32)> TestList.empty?([_])
+** (CompileError) iex:32: invalid use of _. "_" represents a value to be ignored in a pattern and 
+cannot be used in expressions
+
+iex(32)> TestList.empty?(_)
+** (CompileError) iex:32: invalid use of _. "_" represents a value to be ignored in a pattern and cannot be used in expressions
+
+iex(32)> TestList.empty?([1|2])
+false
+iex(33)> TestList.empty?([1,2])
+false
+```
+
+The first clause matches the empty list, whereas the second clause relies on the [head | tail] representation of a non-empty list.
+
+```elixir
+iex(1)> defmodule Polymorphic do
+def double(x) when is_number(x), do: 2 * x
+def double(x) when is_binary(x), do: x <> x
+#return "xx"
+#iex(1)> "Hello " <> "World"
+#iex(2)> "Hello World"
+end
+#iex(1)> "Hello " <> x = "Hello World"
+#Hello World
+#iex(2)> x
+#World
+iex(2)> Polymorphic.double(3)
+6
+iex(3)> Polymorphic.double("Jar")
+"JarJar"
+```
+
+The power of multiclauses starts to show in recursions. The resulting code seems declarative and is devoid of redundant ifs and returns
+
+> devoid : ~이 전혀 없는
+>
+> declarative : 서술문의
+
+```elixir
+iex(1)> defmodule Fact do
+def fact(0), do: 1
+def fact(n), do: n * dact(n - 1)
+end
+iex(2)> Fact.fact(1)
+1
+iex(3)> Fact.fact(3)
+6
+```
+
+```elixir
+defmodule ListHelper do
+def sum([]), do: 0
+def sum([head|tail]), do: head + sum(tail)
+end
+iex(1)> ListHelper.sum([])
+iex(2)> ListHelper.sum([1,2,3])
+6
+```
+
+But the multiclause approach forces you to layer your code into many small functions and push the conditional logic deeper into lower layers. The underlying pattern-matching mechanism makes it possible to implement all kinds of branchings that are based on values or types of function arguments.
+
+> imperative : 반드시 해야하는
+
+### 3.2.2 Classical branching construcs
+

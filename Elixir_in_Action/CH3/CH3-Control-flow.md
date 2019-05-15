@@ -482,5 +482,139 @@ But the multiclause approach forces you to layer your code into many small funct
 
 > imperative : 반드시 해야하는
 
-### 3.2.2 Classical branching construcs
+### 3.2.2 Classical branching constructs
+
+#### If and Unless
+
+```elixir
+if condition do
+...
+else
+...
+end
+```
+
+***Recall that everything in Elixir is an expression that has a return value.***
+
+```elixir
+def max(a, b) do 
+#if a >= b is true return a
+	if a >= b, do: a, else: b
+end
+
+def max(a, b) do
+#if a >= b is false return b
+	unless a >= b, do:b, else: a
+end
+```
+
+#### COND
+
+The cond macro can be thought of as equivalent to an if-else-if pattern. It takes a list of expressions and executes the block of the first expression that evaluates to a truthy value:
+
+```elixir
+cond do
+	expression_1 ->
+	...
+	expression_2 ->
+	...
+end
+```
+
+The result of cond is the result of the corresponding executed block. If none of the conditions is satisfied, ***cond raises an error.***
+
+```elixir
+def max(a,b) do
+	cond do
+        a >= b -> a
+        true -> b #Default clause
+	end
+end
+```
+
+#### CASE
+
+```elixir
+case expression do
+    pattern_1 ->
+    ...
+    pattern_2 ->
+    ...
+...
+end
+```
+
+The first one that matches is executed, and the result of the corresponding block (its last expression) is the result of the entire case expression. ***If no clause matches, an error is raised***
+
+```elixir
+def max(a,b) do
+    case a >= do
+        true -> a
+        false -> b
+    end
+end
+```
+
+The case construct is most suitable if you don’t want to define a separate multiclause function.
+
+### 3.3.3 The with special form
+
+*with* can be very useful when you need to ***chain a couple of expressions*** and ***return the error of the first expression that fails.***
+
+```elixir
+${
+"login" => "alice"
+"email" => "some_mail"
+"password" => "password"
+"other_field" => "some_value"
+"yet_another_field" => "..."
+...
+}
+# result
+%{login: "alice", email: "some_email", password: "password"}
+```
+
+```elixir
+#without 'with' clause
+def extract_user(user) do case extract_login(user) do
+	{:error, reason} -> {:error, reason} {:ok, login} ->
+		case extract_email(user) do
+			{:error, reason} -> {:error, reason} {:ok, email} ->
+				case extract_password(user) do {:error, reason} -> {:error, reason}
+					{:ok, password} -> %{login: login, email: email, password: password}
+			end
+		end
+	end
+end
+```
+
+```elixir
+#'with'
+with pattern_1 <- expression_1,
+	pattern_2 <- expression_2,
+	...
+do
+...
+end
+```
+
+```elixir
+#with 'with' clause
+iex(1)> witht {:ok, login} <- {:ok, "alice"},
+	{:ok, email} <- {:ok, "some_email"} do
+	%{login: login, email: email}
+	end
+```
+
+## 3.4 Loops and Iterations
+
+Looping in Elixir works very differently than it does in mainstream languages.
+
+***The principal looping tool in Elixir is recursion***
+
+### 3.4.1 Iterating with recursion
+
+### 3.4.2 Tail function calls
+
+
 

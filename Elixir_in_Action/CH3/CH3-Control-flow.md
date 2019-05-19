@@ -616,5 +616,63 @@ Looping in Elixir works very differently than it does in mainstream languages.
 
 ### 3.4.2 Tail function calls
 
+Elixir (or, more precisely, Erlang) treats tail calls in a specific manner by performing a tail-call optimization. the tail function call consumes no additional memory
 
+Tail calls are especially useful in recursive functions. ***A tail-recursive function can run virtually forever without consuming additional memory.***
+
+```elixir
+defmodule ListHelper do
+  def sum(list) do
+      do_sum(0, list)
+  end
+
+  defp do_sum(current_sum, [])  do
+    current_sum
+  end
+
+  defp do_sum(current_sum, [head | tail]) do
+    new_sum = head + current_sum
+    do_sum(new_sum, tail)
+  end
+end
+
+#iex run sum_list_tc.ex
+#ListHelper.sum([1, 2, 3, 4, 5])
+#15
+```
+
+#### Tail vs Non-Tail
+
+Non-tail recursion often looks more elegant and concise, and it can in some circumstances yield better performance. When you write recursion, you should choose the solution that seems like a better fit
+
+***If you need to run an infinite loop, tail recursion is the only way that will work.*** Otherwise, the choice amounts to which looks like a more elegant and performant solution.
+
+#### Recognizing Tail Calls
+
+Tail calls can take different shapes. ***A tail call can also happen in a conditional expression***
+
+```elixir
+def fun(...) do
+	...
+	if something do
+		...
+		another_fun(...)
+	end
+end
+```
+
+***But the following code isn't a tail call:***
+
+```elixir
+def fun(...) do
+	# Not a tail call!!
+	1 +  another_fun(...)
+end
+```
+
+This is because the call to another_fun isn't the last thing done in the fun function.
+
+> 꼬리제귀를 할 때에는 돌아올 위치를 기억 할 필요가 없기 때문에 스택에 추가적인 메모리가 필요없음
+
+### 3.4.3 Higher-order functions
 

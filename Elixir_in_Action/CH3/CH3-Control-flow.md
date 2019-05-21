@@ -672,7 +672,61 @@ end
 
 This is because the call to another_fun isn't the last thing done in the fun function.
 
-> 꼬리제귀를 할 때에는 돌아올 위치를 기억 할 필요가 없기 때문에 스택에 추가적인 메모리가 필요없음
+> 꼬리재귀를 할 때에는 돌아올 위치를 기억 할 필요가 없기 때문에 스택에 추가적인 메모리가 필요없음
 
 ### 3.4.3 Higher-order functions
+
+A higher-order function is a fancy name for a function that takes one or more functions as its input or returns one or more functions (or both). The word function here means “function value.”
+
+```elixir
+iex(1)> Enum.each(
+            [1, 2, 3],
+            fn x -> IO.puts(x) end
+		)
+#Enum.each(list, lambda)
+1
+2
+3
+```
+
+The function Enum.each/2 takes an enumerable (in this case, a list), and a ***lambda.*** It iterates through the enumerable, calling the lambda for each of its elements. ***Because Enum.each/2 takes a lambda as its input, it’s called a higher-order function.***
+
+You can use Enum.each/2 to iterate over enumerable structures without writing the recursion. Elixir’s standard library provides many other useful iteration helpers in the Enum module.
+
+```elixir
+iex(1)> Enum.map(
+[1, 2, 3],
+fn x -> 2 * x end 
+)
+[2, 4, 6]
+```
+
+Recall from chapter 2 that you can use the capture operator, &, to make the lambda definition a bit denser: The &(…) denotes a simplified lambda definition, ***where you use &n as a placeholder for the nth argument of the lambda.***
+
+```elixir
+iex(2)> Enum.map(
+[1, 2, 3],
+&(2 * &1)
+)
+[2, 4, 6]
+iex(3)> Enum.filter(
+	[1,2,3],
+	#return only odd number
+	&(rem(&1, 2) == 1)
+	)
+[1, 3]
+```
+
+```elixir
+#reporting all missing fields
+case Enum.filter(
+	["login", "email", "password"],
+	&(not Map.has_key?(user, &1))
+	)do
+[] ->
+...
+missing_fields ->
+...
+end
+```
 

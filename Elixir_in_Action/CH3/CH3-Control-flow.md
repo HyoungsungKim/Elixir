@@ -730,3 +730,178 @@ missing_fields ->
 end
 ```
 
+#### Reduce
+
+Probably the most versatile function from the Enum module is ***Enum.reduce/3***, which can be used to transform an enumerable into anything. 
+
+```elixir
+Enum.reduce(
+enumerable,
+initial_acc,
+fn element, acc ->
+	...
+end
+)
+```
+
+The final argument is a lambda that’s called for each element. The lambda receives the element from the enumerable and the current accumulator value. The lambda’s task is to compute and return the new accumulator value.
+
+```elixir
+iex(1)> Enum.reduce(
+		[1,2,3],
+		0,
+		fn element, sum -> sum + element end)
+```
+
+you can turn an operator into a lambda by calling &+/2, &*/2, and so on.
+
+```elixir
+iex(2)> Enum.reduce([1,2,3], 0, &+/2)
+6
+iex(3)> Enum.reduce(
+	[1, "not a number", 2, :x, 3],
+	0,
+	fn
+		element, sum when is_number(element) ->	sum + element
+		
+		_, sum -> sum
+		end
+	)
+```
+
+This example relies on a multiclause lambda to obtain the desired result. If the element is a number, you add its value to the accumulated sum. Otherwise (if the element isn't a number), you return whatever sum you have at the moment, effectively passing it unchanged to the next iteration step.
+
+```elixir
+defmodule NumHelper do
+	def sum_nums(enumerable) do
+		Enum.reduce(enumberable, 0, &add_num/2)
+	end
+	
+	defp add_num(num, sum) when is_number(num), do: sum + sum
+	defp add_num(_, sum), do: sum
+end
+```
+
+### 3.4.4 Comprehensions
+
+The cryptic “comprehensions” name denotes another construct that can help you iterate and transform enumerables
+
+> cryptic : 숨은
+
+The following example uses a comprehension to square each element of a list
+
+```elixir
+iex(1)> for x <- [1, 2, 3] do
+		x * x
+	end
+```
+
+Comprehensions have various other features that often make them elegant, compared to Enum-based iterations. 
+
+```elixir
+iex(2)> for x <- [1, 2, 3], y <- [1, 2, 3], do: {x, y, x*y}
+[
+    {1, 1, 1}, {1, 2, 2}, {1, 3, 3},
+    {2, 1, 2}, {2, 2, 4}, {2, 3, 6},
+    {3, 1, 3}, {3, 2, 6}, {3, 3, 9}
+]
+iex(3)> for x <- 1..9, y <- 1..9, do: {x, y, x*y}
+```
+
+***comprehensions can return anything that’s collectable.*** Collectable is an abstract term for a functional data type that can collect values. Some examples include lists, maps, MapSet, and file streams; you can even make your own custom type collectable
+
+```elixir
+iex(1)> multiplication_table = 
+	for x <- 1..9, y- 1..9,	into: %{} do
+		{{x * y}, x * y}
+	end
+iex(2)> multiplication_table[{7, 6}]
+42
+iex(3)> mulitiplication_table2 = 
+        for x <- 1..9, y <- 1..9, x <= y, into %{} do
+        {{x, y}, x * y}
+	end
+iex(4)> multiplication_table2[{7, 6}]
+nil
+iex(5)> multiplication_table2[{6, 7}]
+42
+```
+
+Notice the *into* option, ***which specifies what to collect.*** In this case, it’s an empty map %{} that will be populated with values returned from the *do* block. ***Notice how you return a {factors, product} tuple from the do block. You use this format because map “knows” how to interpret it. The first element will be used as a key, and the second will be used as the corresponding value.***
+
+### 3.4.5 Streams
+
+Streams are a special kind of enumerable that can be useful for doing lazy composable operations over anything enumerable.
+
+> composible : 구성가능한
+
+```elixir
+iex(1)> employee = ["Alice", "Bob", "John"]
+["Alice", "Bob", "John"]
+iex(2)> Enum.with_index(employee)
+[{"Alice",0},  {"Bob",1},  {"John", 2}]
+#You can now feed the result of Enum.with_index/1 to Enum.each/2 to get the desired output:
+iex(3)> employees 		|>
+		Enum.with_index	|>
+		Enum.each(
+		fn{employee, index} -> 
+		IO.puts("#{index + 1}. #{employee}"))
+		end)
+1. Alice
+2. Bob
+3. John
+```
+
+#### Pipeline operator in the shell
+
+***You may wonder why the pipeline operator is placed at the end of the line. The reason is that in the shell, you have to place the pipeline on the same line as the preceding expression.*** In the source file, however, it’s better to place |> at the beginning of the next line.
+
+Essentially, ***it iterates too much.*** The Enum.with_ index/1 function goes through the entire list to produce another list with tuples, and Enum.each then performs another iteration through the new list. ***Obviously, it would be better if you could do both operations in a single pass, and this is where streams can help you.***
+
+Streams are implemented in the *Stream* module, which at first glance looks similar to the Enum module, containing functions like map, filter, and take. These functions take any enumerable as an input and give back a stream: an enumerable with some special powers. ***A stream is a lazy enumerable, which means it produces the actual result on demand.***
+
+```elixir
+iex(1)> stream = [1, 2, 3] |>
+		Stream.map(fn x-> 2 * x end)
+#Stream<[enum: [1, 2, 3], funs: [#Function<44.45151713/1 in Stream.map/2>]]>
+iex(2)> Enum.to_list(stream)
+[2, 4, 6]
+iex(3)> Enum.tale(stream, 1)
+[2]
+```
+
+Because a stream is a lazy enumerable, the iteration over the input list ([1, 2, 3]) and the corresponding transformation (multiplication by 2) haven’t yet happened.
+
+```elixir
+iex(2)> employees				|>
+		Stream.with_index		|>
+		Enum.each(
+			fn {employee, index} ->
+				IO.puts("#{index + 1}. #{employee}")
+			end)
+1. Alice
+2. Bob
+3. John
+```
+
+***This becomes increasingly useful when you need to compose multiple transformations of the same list.***
+
+```elixir
+iex(1)> [9, -1, "foo", 25, 49]							 |>	
+		Stream.filter(&(is_number(&1) and &1 > 0))		  |>
+		Stream.map(&{&1, :math.sqrt(&1)})			      |>
+		Stream.with_index								|>
+		Enum.each(
+			fm{(input, result}, index} ->
+			IO.puts("#{index + 1}. sqrt(#{input}) = #{result}")
+			end
+		)
+1. sqrt(9) = 3.0
+2. sqrt(25) = 5.0
+3. sqrt(49) = 7.0
+```
+
+This lazy property of streams can become useful for consuming slow and potentially large enumerable input.
+
+***The consequence is that you never read the entire file in memory; instead, you work on each line individually.***
+

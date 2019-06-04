@@ -149,3 +149,18 @@ Given that they’re essentially tuples, ***records should be faster than maps**
 > map 등장 이후로 잘 안쓰임. 하지만 erlang에서는 많이 쓰이고 있음
 
 ### 4.1.5 Data transparency
+
+***It’s important to be aware that data in Elixir is always transparent.*** Clients can read any information from your structs (and any other data type), and there’s no easy way of preventing that. In that sense, encapsulation works differently than in typical OO languages. In Elixir, modules are in charge of abstracting the data and providing operations to manipulate and query that data, but ***the data is never hidden.***
+
+```elixir
+iex(1)> todo_list = ToDoList.new() |>
+		ToDoList.add_entry(%{date: ~D[2018-12-19], title: "Dentist"})
+%{~D[2018-12-19] => [%{date: ~D[2018-12-19], title: "Dentist"}]}
+```
+
+> map: %{key => value}
+
+One final thing you should know, related to data inspection, is the `IO.inspect/1` function. This function prints the inspected representation of a structure to the screen and returns the structure itself. 
+
+## 4.2 Working with hierarchical data
+

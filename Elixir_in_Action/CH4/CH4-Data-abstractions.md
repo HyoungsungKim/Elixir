@@ -164,3 +164,78 @@ One final thing you should know, related to data inspection, is the `IO.inspect/
 
 ## 4.2 Working with hierarchical data
 
+you’ll extend the TodoList abstraction to provide basic CRUD support.
+
+- C : Create
+- R : Read
+- U : Update
+- D : Delete
+
+### 4.2.1 Generating IDs
+
+- Transform the to-do list into a struct
+- Use the entry's ID as the key
+
+### 4.2.2 Updating entries
+
+The function will accept an ID value for the entry and an updater lambda. This will work similarly to Map.update. The lambda will receive the original entry and return its modified version.
+
+#### Fun with pattern matching
+
+`update_entry/3` works fine, but it’s not quite bulletproof. The updater lambda can return any data type, possibly corrupting the entire structure.
+
+You can go a step further and assert that the ID value of the entry hasn't been changed in the lambda:
+
+```elixir
+old_entry_id = old_entry.id
+new_entry = %{id: ^old_entry_id} = updater_fun.(old_entry)
+```
+
+`^`var in a pattern match means you’re matching on the value of the variable.
+
+> 변수에 새로운 값이 대입되는 것을 원치 않을 수도 있습니다. 이러한 상황에서는 핀 연산자 `^`를 사용해야 합니다. (elixir school)
+>
+> 여기서 undater_fun함수가 %{id: ^old_entry_id}의 값과 다른 값이 나오면 에러 발생
+
+```elixir
+def update_entry(todo_list, %{} = new_entry) do
+	update_entry(todo_list, new_entry.id, fn _ -> new_entry end)
+end
+```
+
+### 4.2.3 Immutable hierarchical updates
+
+If you have hierarchical data, you can’t directly modify part of it that resides deep in its tree. Instead, you have to walk down the tree to the particular part that needs to be modified, and then transform it and all of its ancestors. 
+
+#### Provided Helpers
+
+Remember, to update an element deep in the hierarchy, you have to walk to that element and then update all of its parents. To simplify this, Elixir offers support for more elegant deep hierarchical updates.
+
+```elixir
+iex> todo_list = % {
+	1 => %{date: ~D[2018-12-19], title: "Dentist"},
+	2 => %{date: ~D[2018-12-20], title: "Shopping"},
+	3 => %{date: ~D[2018-12-19], title: "Movie"}
+}
+
+iex> put_in(todo_list[3].title, "Theater")
+%{
+	1 => %{date: ~D[2018-12-19], title: "Dentist"}
+	2 => %{date: ~D[2018-12-20], title: "Shopping"},
+	3 => %{date: ~D[2018-12-19], title: "Theater"}
+}
+```
+
+It’s also worth noting that Elixir provides similar alternatives for data retrieval and updates in the form of the `get_in/2`, `update_in/2`, and `get_and_update_in/2` macros.
+
+>```elixir
+>iex> steve = %Example.User{name: "Steve"}
+>#Example.User<name: "Steve", roles: [...], ...>
+>iex> sean = %{steve | name: "Sean"}
+>#Example.User<name: "Sean", roles: [...], ...>
+>```
+>
+>***`|` operator is used to change***
+
+### 4.2.4 Iterative updates
+

@@ -6,3 +6,5 @@
 
 > anonymous function : can be worked as closures
 
+[Understanding the & (capture operator) in Elixir](https://dockyard.com/blog/2016/08/05/understand-capture-operator-in-elixir)
+

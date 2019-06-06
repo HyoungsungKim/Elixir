@@ -235,7 +235,102 @@ It’s also worth noting that Elixir provides similar alternatives for data retr
 >#Example.User<name: "Sean", roles: [...], ...>
 >```
 >
->***`|` operator is used to change***
+>***`|` operator is used to correct struct***
 
 ### 4.2.4 Iterative updates
 
+To build the to-do list iteratively, you’re relying on `Enum.reduce/3.` Recall from chapter 3 that reduce is used to transform something enumerable to anything else. In this case, you’re transforming a raw list of `Entry` instances into an instance of the `Todo-List` struct.
+
+## 4.3 Polymorphism with protocols
+
+> 이미 정의된 모듈에 자신이 원하는 type이나 struct 추가하는 느낌?
+>
+> //` in function parameter means default value
+
+`Polymorphism` is a runtime decision about which code to execute, based on the nature of the input data. In Elixir, the basic (but not the only) way of doing this is by using the language feature called `protocols`.
+
+```elixir
+Enum.each([1, 2, 3], &IO.inspect/1)
+Enum.each(1..3, &IO.inspect/1)
+Enum.each({a: 1, b: 2}, &IO.inspect/1)
+```
+
+### 4.3.1 Protocol basics
+
+A `protocol` is a module in which you declare functions without implementing them.
+
+```elixir
+defprotocol String.Chars do	#Definition of the protocol
+	def to_string(thing)	#Declaration of protocol function
+end
+```
+
+### 4.3.2 Implementing a protocol
+
+```elixir
+defimpl String.Chars, for: Integer do
+	def to_string(term) do
+		Integer.to_string(term)
+	end
+end
+```
+
+The `for: Type` part deserves some explanation. The type is an atom and can be any of following aliases: `Tuple`, `Atom`, `List`, `Map`, `BitString`, `Integer`, `Float`, `Function`, `PID`, `Port`, or `Reference`. These values correspond to built-in Elixir types.
+
+In addition, the alias `Any` is allowed, which makes it possible to specify a fallback implementation.
+
+> fallback : 대비책
+
+You can place the protocol implementation anywhere in your own code, and the runtime will be able to take advantage of it.
+
+### 4.3.3 Built-in protocols
+
+[Why are there two kinds of functions in Elixir?](https://stackoverflow.com/questions/18011784/why-are-there-two-kinds-of-functions-in-elixir)
+
+Enumerable : Enumerable is `protocols`, enum is `module`: Enumerable protocol used by `Enum` and `Stream` modules
+
+```elixir
+Enum.map([1,2,3], &(&1 * 2))
+#internal implementation
+def map(enumerable, fun) do
+	reducer = fn x, acc -> {:cont, [fun.(x) | acc]} end
+	Enumerable.reduce(enumerable, {:cont, []}, reducer) |> elem(1) |> :listes.reverse()
+end
+```
+
+Stream : Functions for creating and composing streams. The `stream` module allows us to map the range, without triggering its enumeration:
+
+```elixir
+iex> range = 1..5
+iex> Enum.map(range, &(&1 * 2))
+[2, 4, 6, 8, 10]
+
+iex> range = 1..3
+iex> stream = Stream.map(range, &(&1 * 2))
+iex> Enum.map(stream, &(&1 + 1))
+[3, 5, 7])
+```
+
+We say the functions in `Stream` are ***lazy*** and the functions in `Enum` are *eager*.
+
+Due to their laziness, streams are useful when working with large (or even infinite) collections.
+
+Collectable : A protocol to traverse data structures. The `Enumerable` protocol is useful to take values out of a collection. In order to support a wide range of values, the functions provided by the `Enumerable` protocol do not keep shape. The Collectable module was designed to fill the gap left by the `Enumerable` protocol.
+
+#### Collectable to-do list
+
+```elixir
+defimpl Collectable, for: TodoList do
+	def into(original) do
+		{original, &into_callback/2}
+	end
+	
+	defp into_callback(todo_list, {:cont, entry}) do
+		TodoList.add_entry(todo_list, entry)
+	end
+	defp into_callback(todo_list, :done), do: todo_list
+	defp into_callback(todo_list, :halt), do: ok
+end
+```
+
+> & is used to capture function [Understanding the & (capture operator) in Elixir](https://dockyard.com/blog/2016/08/05/understand-capture-operator-in-elixir)

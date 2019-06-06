@@ -2,6 +2,14 @@ defmodule TodoList do
   defstruct auto_id: 1, entries: %{}
   def new(), do: %TodoList{}  #Create a new instance
 
+  def new(entries \\ []) do
+    Enum.reduce(
+      entries,
+      %TodoList{},  #initial acc value
+      fn entry, todo_list_acc -> add_entry(todo_list_acc, entry) end
+    )
+  end
+
   def add_entry(todo_list, entry) do
     entry = Map.put(entry, :id, todo_list.auto_id)
     new_entries = Map.put(
@@ -35,5 +43,4 @@ defmodule TodoList do
         %ToDoList{todo_list | entries: new_entries}
     end
   end
-
 end

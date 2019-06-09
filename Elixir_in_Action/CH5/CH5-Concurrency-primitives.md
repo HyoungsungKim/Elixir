@@ -19,3 +19,5 @@ you can create a large number of processes: the theoretical limit imposed by the
 Running tasks in different processes improves the server’s reliability and fault-tolerance. ***BEAM processes are completely isolated;*** they share no memory, and a crash of one process won’t take down other processes. In addition, BEAM provides a means to detect a process crash and do something about it, such as restarting the crashed process. All this makes it easier to create systems that are more stable and can gracefully recover from unexpected errors, which inevitably occur in production.
 
 ## 5.2 Working with processes
+
+The

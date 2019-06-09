@@ -20,4 +20,68 @@ Running tasks in different processes improves the server’s reliability and fau
 
 ## 5.2 Working with processes
 
-The
+>***Concurrency vs. parallelism***
+>
+>It’s important to realize that concurrency doesn't necessarily imply parallelism. Two concurrent things have independent execution contexts, but this doesn't mean they will run in parallel. If you run two CPU-bound concurrent tasks and you only have one CPU core, parallel execution can’t happen. You can achieve parallelism by adding more CPU cores and relying on an efficient concurrent framework. But you should be aware that concurrency itself doesn't necessarily speed things up.
+
+```elixir
+iex> run_query = 
+	fn query_def ->
+		Process.sleep(2000)
+		"#{query_def} result"
+	end
+iex> run_query.("query 1")
+"query 1 result"
+iex> Enum.map(1..5, &run_query.("query #{&1}"))
+["query 1 result", "query 2 result", "query 3 result", "query 4 result", "query 5 result"]
+```
+
+> #{variable} :  문자열 내부에 변수 대입
+>
+> &(capture operator) : It is used for anonymous function
+
+The only thing you can do to try to make things faster is to run the queries concurrently.
+
+### 5.2.1 Creating processes
+
+To create a process, you can use the auto-imported `spawn/1` function:
+
+```elixir
+spawn(fn -> 
+expression_1
+...
+expression_n
+end)
+```
+
+The function `spawn/1` takes a zero-arity lambda that will run in the new process. After the process is created, `spawn` immediately returns, and the caller process’s execution continues. The provided lambda is executed in the new process and therefore runs concurrently. After the lambda is done, the spawned process exits, and its memory is released.
+
+```elixir
+iex> spawn(fn -> IO.puts(run_query.("query 1")) end)
+#PID<0.48.0>
+result of query 1
+```
+
+The funny-looking `#PID<0.48.0>` that’s returned by `spawn/1` is the identifier of the created process, often called a *pid*. This can be used to communicate with the process.
+
+```elixir
+#First, you’ll create a helper lambda that concurrently runs the query and prints the result:
+iex> async_query.("query 1") = 
+	fn query_def ->
+		spawn(fn -> IO.puts(run_query.(query_def)) end
+	end
+iex> async_query.("query 1")
+#PID<0.52.0>
+result of query 1
+```
+
+***This code demonstrates an important technique: passing data to the created process.*** Notice that `async_query` takes one argument and binds it to the `query_def` variable. This data is then passed to the newly created process via the closure mechanism.
+
+> Enum.each -> :ok 값을 리턴 함. 새로운 값을 만들지 않음(iterator처럼 반복)
+>
+> Enum.map -> 새로운 값을 만듬
+
+Remember, processes are completely independent and isolated.
+
+### 5.2.2 Message passing
+

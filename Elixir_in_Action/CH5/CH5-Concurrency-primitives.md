@@ -85,3 +85,29 @@ Remember, processes are completely independent and isolated.
 
 ### 5.2.2 Message passing
 
+When process A wants process B to do something, it sends an asynchronous message to B. Sending a message amounts to storing it into the receiver’s mailbox. The caller then continues with its own execution, and the receiver can pull the message in at any time and process it in some way. ***Because processes can’t share memory, a message is deep-copied when it’s sent.***
+
+The process mailbox is a FIFO queue limited only by the available memory. The receiver consumes messages in the order received, and a message can be removed from the queue only if it’s consumed.
+
+```elixir
+send(pid, {:an, :arbitary, :term})
+#The consequence of send is that a message is placed in the mailbox of the receiver.
+```
+
+```elixir
+#On the receiver side, to pull a message from the mailbox, you have to use the receive expression:
+receive do
+	pattern_1 -> do_something
+	pattern_2 -> do_something_else
+end
+```
+
+If there are no messages in the mailbox, `receive` waits indefinitely for a new message to arrive.
+
+> indefinitely : 무기한으로
+
+The same thing happens if a message can’t be matched against provided pattern clauses:
+
+If you don’t want `receive` to block, you can specify the `after` clause, which is executed if a message isn't received in a given time frame (in milliseconds):
+
+#### Receive Algorithm

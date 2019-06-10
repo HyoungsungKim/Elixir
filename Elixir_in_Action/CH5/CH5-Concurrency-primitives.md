@@ -111,3 +111,49 @@ The same thing happens if a message can’t be matched against provided pattern 
 If you don’t want `receive` to block, you can specify the `after` clause, which is executed if a message isn't received in a given time frame (in milliseconds):
 
 #### Receive Algorithm
+
+Recall from chapter 3 that an error is raised when you can’t pattern-match the given term. The `receive` expression is an exception to this rule.
+
+> `reveice`는 pattern-matching안되면 계속 기다림
+
+To summarize, receive tries to find the first (oldest) message in the process mailbox that can be matched against any of the provided patterns.
+
+#### Synchronous sending
+
+Sometimes a caller needs some kind of response from the receiver. There’s no special language construct for doing this. Instead, you must program both parties to cooperate using the basic asynchronous messaging facility.
+
+The caller must include its own pid in the message contents and then wait for a response from the receiver. The receiver uses the embedded pid to send the response to the caller. You’ll see this in action a bit later, when we discuss server processes.
+
+#### Collecting query results
+
+```elixir
+iex> async_query = 
+	fn query_def ->
+		caller = self()
+		spawn(fn -> 
+			send(caller, {:query_result, run_query.(query_def)})
+		end)
+	end
+iex> Enum.each(1..5, &async_query.("query #{&1}"))
+#capture operator is used because of variable
+# "#"은 문자열에서 대입 위해 사용 됨 C/C++에서 printf("%d", 1) 여기서 %와 비슷한 역할...?
+#Enum.each는 원소 순환 할 때 사용
+```
+
+> Pattern : {:query_result, run_query.(query_def)}를 caller에서 비동기로 실행. 여기서 caller는 자기자신(self())
+
+```elixir
+iex> get_result = 
+	fn -> receive do
+		{:query_result, result} -> result
+	end
+	end
+# fn _-> get_result.() 이게 기가 막히네;;
+iex> Enum.map(1..5, fn _-> get_result.() end)
+["query 1 result", "query 2 result", "query 3 result", "query 4 result",
+ "query 5 result"]
+ #Results are nondeterministic order, but luckly, this time was deterministic
+```
+
+## 5.3 Stateful server process
+

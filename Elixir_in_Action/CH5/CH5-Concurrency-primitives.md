@@ -157,3 +157,64 @@ iex> Enum.map(1..5, fn _-> get_result.() end)
 
 ## 5.3 Stateful server process
 
+Spawning processes to perform one-off tasks isn’t the only use case for concurrency. ***stateful server processes resemble objects.*** They maintain state and can interact with other processes via messages. But a process is concurrent, so multiple server processes can run in parallel. Server processes are an important concept in Elixir/Erlang systems, so we’ll spend some time exploring this topic.
+
+### 5.3.1 Server processes
+
+A `server process` is an informal name for a process that runs for a long time (or forever) and can handle various requests (messages). To make a process run forever, you have to use endless tail recursion.
+
+```elixir
+defmodule DatabaseServer do
+	def start do
+		sapwn(&loop/0)
+	end
+	
+	defp loop do
+		receive do
+		
+		end
+		
+		loop()
+	end
+end
+```
+
+`start/0` is the so-called `interface function` that’s used by clients to start the server process. When `start/0` is called, it creates the long-running process that runs forever. This is ensured in the private `loop/0` function, which waits for a message, handles it, and finally calls itself, thus ensuring that the process never stops. This loop isn't CPU-intensive. ***Waiting for a message puts the process in a suspended state and doesn't waste CPU cycles.***
+
+When implementing a server process, it usually makes sense to put all of its code in a single module. The functions of this module generally fall into two categories: 
+
+- interface : Interface functions are public and are executed in the caller process. They hide the details of process creation and the communication protocol.
+- implementation :  Implementation functions are usually private and run in the server process.
+
+```elixir
+def loop do
+    receive do
+        {:run_query, caller, query_def} ->
+        send(caller, {:query_def, run_query(query_def)})
+        #결과를 클라이언트에게 다시 보냄
+    end
+loop()
+end
+
+defp run_query(query_def) do
+	process.sleep(2000)
+	"#{query_def} result"
+end
+```
+
+Usually you want to hide these communication details from your clients. Clients shouldn't depend on knowing the exact structure of messages that must be sent or received. To hide this, it’s best to provide a dedicated interface function. Let’s introduce a function called ***`run_async/2` that will be used by clients to request the operation*** — in this case, a query execution — from the server. This function makes the clients unaware of message-passing details — they just call `run_async/2` and get the result.
+
+```elixir
+defmodule DatabaseServer do
+	def get_result do
+		receive do
+			{:query_result, result} -> result
+		after
+			5000 -> {:error, :timeout}
+		end
+	end
+end
+```
+
+#### Server process are sequential
+

@@ -218,3 +218,9 @@ end
 
 #### Server process are sequential
 
+It’s important to realize that a ***server process is internally sequential***. It runs a loop that processes one message at a time. Thus, if you issue five asynchronous query requests to a single server process, they will be handled one by one, and the result of the last query will come after 10 seconds.
+
+A server process can be considered a synchronization point. ***If multiple actions need to happen synchronously, in a serialized manner, you can introduce a single process and forward all requests to that process, which handles the requests sequentially.***
+
+You want to run multiple queries concurrently to get the result as quickly as possible. What can you do about it?
+

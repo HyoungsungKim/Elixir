@@ -224,3 +224,51 @@ A server process can be considered a synchronization point. ***If multiple actio
 
 You want to run multiple queries concurrently to get the result as quickly as possible. What can you do about it?
 
+Assuming that the queries can be run independently, you can start a pool of server processes, and then for each query somehow choose one of the processes from the pool and have that process run the query. If the pool is large enough and you divide the work uniformly across each worker in the pool, you’ll parallelize the total work as much as possible.
+
+```elixir
+iex> pool = Enum.map(1..100, fn _ -> DatabaseServer.start() end)
+```
+
+All of these processes wait for a message, they’re effectively idle and don’t waste CPU time.
+
+```elixir
+iex> Enum.each(
+	1..5,
+	fn query_def ->
+		server_pid = Enum.at(pool, :rand_uniform(100) - 1)
+		DatabaseServer.run_async(server_pid, query_def)
+	end
+)
+```
+
+> Enum.at(A, index) : A의 index를 reference
+
+You could do better if you used a map with process indexes as keys and pids as values; and there are other alternatives, such as using a round-robin approach. But for now, let’s stick with this simple implementation.
+
+```elixir
+iex> Enum.map(1..5, fn _ -> DataBaseServer.get_result() end)
+```
+
+### 5.3.2 Keeping a process state
+
+Server processes open the possibility of keeping some kind of process-specific state. For example, when you talk to a database, you need a connection handle that’s used to communicate with the server. If your process is responsible for TCP communication, it needs to keep the corresponding socket.
+
+To keep state in the process, you can extend the loop function with additional argument(s).
+
+```elixir
+def start do
+	spawn(fn ->
+		initial_state = ...
+		loop(initial_state)
+	end)
+end
+
+defp loop(state) do
+	...
+	loop(state)
+end
+```
+
+### 5.3.3 Mutable state
+

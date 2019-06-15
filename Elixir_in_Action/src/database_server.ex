@@ -1,21 +1,25 @@
-defmodule DatabaseServer do
+defmodule DataBaseServer do
   def start do
-    spawn(&loop/0)
+    spawn(fn ->
+      connection = :rand.uniform(1000)
+      #Rand is from erlang
+      loop(connection)
+    end)
   end
 
-  defp loop do
+  defp loop(connection) do
     receive do
-      #send a result to caller(cilient)
-      {:run_query, caller, query_def} -> send(caller, {:query_result, run_query(query_def)})
+      {:run_query, from_pid, query_def} ->
+        query_result = run_query(connection, query_def)
+        send(from_pid, {:query_result, query_result})
+      end
+      loop(connection)
     end
 
-    loop()
-  end
-
-  defp run_query(query_def) do
-    Process.sleep(2000)
-    "#{query_def} result"
-  end
+    defp run_query(connection, query_def) do
+      Process.sleep(2000)
+      "connection #{connection}: #{query_def} result"
+    end
 
   def run_async(server_pid, query_def) do
     send(server_pid, {:run_query, self(), query_def})

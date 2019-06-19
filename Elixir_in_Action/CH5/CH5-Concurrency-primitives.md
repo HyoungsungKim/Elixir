@@ -272,3 +272,76 @@ end
 
 ### 5.3.3 Mutable state
 
+So far, you've seen how to keep constant process-specific state. It doesn’t take much to make this state mutable. Here’s the basic idea:
+
+```elixir
+def loop(state) do
+	new_state =
+		receive do
+			msg1 ->
+			...
+			msg2 ->
+			...
+		end
+	loop(new_state)
+end
+```
+
+This is a typical stateful server technique.
+
+By sending messages to a process, a caller can affect its state and the outcome of subsequent requests handled in that server.
+
+```elixir
+defmodule Calculator do
+    defp loop(current_value) do
+	new_value = 
+		receive do
+			#send호출하고 current_value 반환
+			{:value, caller} ->
+			send(caller, {:response, current_value})
+			current_value
+			
+			#일치 하는 패턴에 따라 반환 값 달라짐
+			{:add, value} -> current_value + value
+			{:sub, value} -> current_value - value
+			{:mul, value} -> current_value * value
+			{:div, value} -> current_value / value
+			
+			#일치하는 패턴 없을때 에러 출력하고 current_value 반환
+			invalid_request -> 
+				IO.puts("invalid request #{inspect invalid_request}")
+				current_value
+		end
+		loop(new_value)
+    end
+end
+```
+
+Unlike a :value message handler, arithmetic operation handlers don’t send responses back to the caller. This makes it possible to run these operations asynchronously.
+
+Implement the interface functions that will be used by clients.
+
+```elixir
+def start do
+	spawn(fn -> loop(0) end)
+end
+
+def value(server_pid) do
+	send(server_pid, {:value, self()})
+	receive do
+		{:response, value} -> value
+	end
+end
+
+def add(server_pid, value), do: send(server_pid, {:add, value})
+def sub(server_pid, value), do: send(server_pid, {:sub, value})
+def mul(server_pid, value), do: send(server_pid, {:mul, value})
+def div(server_pid, value), do: send(server_pid, {:div, value})
+```
+
+> send로 응답 요청하고 받으면 receive로 응답 확인
+
+Keep in mind that the server handles messages in the order received, so requests are handled in the proper order.
+
+#### Refactoring The Loop
+

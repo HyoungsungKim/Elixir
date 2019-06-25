@@ -345,3 +345,107 @@ Keep in mind that the server handles messages in the order received, so requests
 
 #### Refactoring The Loop
 
+As you introduce multiple requests to your server, the loop function becomes more complex. If you have to handle many requests, it will become bloated, turning into a huge switch/case -like expression.
+You can refactor this by relying on pattern matching and moving the message handling to a separate multiclause function. This keeps the code of the loop function very simple:
+
+```elixir
+defp loop(current_value) do
+	new_value = 
+		receive do
+			message -> process_message(current_value, message)
+		end
+		
+	loop(new_value)
+end
+
+defp process_message(current_value, {:value, caller}) do
+	send(caller, {:response, current_value})
+	current_value
+end
+```
+
+### 5.3.4 Complex states
+
+State is usually much more complex than a simple number. But the technique remains the same — ***you keep the mutable state using the private loop function.***
+
+Let's look at this technique using the TodoList abstraction developed in chapter 4. First, let's recall the basic usage of the structure:
+
+```elixir
+# ~: 정규 표현식 만듬(generate regular expression)
+iex(1)> todo_list = TodoList.new() |>
+	TodoList.add_entry(%{date: ~D[2018-12-19], title: "Dentist:"}) |>
+	TodoList.add_entry(%[date: ~D[2018-12-20], title: "Shopping") |>
+	TodoList.add_entry(%[date: ~D[2018-12-19], title: "Movies"})
+iex(2) TodoList.entries(todo_list, ~D[2018-12-19])
+[
+	%{date: ~D[2018-12-19], id: 1, title: "Dentist"},
+	%{date: ~D[2018-12-19], id: 3, title: "Movies"}
+]
+```
+
+```elixir
+defmodule TodoServer do
+	def start do
+		spawn(fn -> loop(TodoList.new()) end)
+	end
+	
+	defp loop(todo_list) do
+		new_todo_list = 
+			receive do
+				message -> process_message(todo_list, message)
+			end		
+		loop(new_todo_list)
+	end
+	
+	#서버에 요청하면
+	def add_entry(todo_server, new_entry) do
+		send(todo_server, {:add_entry, new_entry})
+	end
+	
+	#서버에서 이 함수 실행시켜서 TodoList 모듈 호출 해서 add_entry 실행
+	defp process_message(todo_list, {:add_entry, new_entry})
+		TodoList.add_entry(todo_list, new_entry)
+	end
+	
+	def entries(todo_server, date) do
+		send(todo_server, {:entries, self(), date})
+		
+		receive do
+			{:todo_list, entries} -> entries
+		after 
+			5000 -> {:error, :timeout}
+		end
+	end
+	
+	defp process_message(todo_list, {:entries, caller, date}) do
+		send(caller, {:todo_entries, TodoList.entries(todo_list, date)})
+		todo_list
+	end
+end
+```
+
+#### Concurrent vs Functional Approach
+
+But you shouldn't abuse processes to avoid using the functional approach of transforming immutable data. ***The data should be modeled using pure functional abstractions, just as you did with `TodoList` .***
+
+### 5.3.5 Registered processes
+
+To make process A send messages to process B, you have to bring the pid of process B to process A. In this sense, a pid resembles a reference or pointer in the OO world. Sometimes it can be cumbersome to keep and pass pids.
+
+If you know there will always be only one instance of some type of server, you can give the process a local name and use that name to send messages to the process.
+
+```elixir
+iex> Process.reguster(self(), :some_name)
+#Process 이름이 :some_name으로 지정 됨
+```
+
+The following rules apply to registered names:
+
+- The name can only be an atom.
+- A single process can have only one name.
+- Two processes can't have the same name.
+
+***If these rules aren't satisfied, an error is raised.***   
+
+## 5.4 Runtime considerations
+

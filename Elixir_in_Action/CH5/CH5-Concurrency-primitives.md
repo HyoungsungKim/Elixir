@@ -449,3 +449,96 @@ The following rules apply to registered names:
 
 ## 5.4 Runtime considerations
 
+It’s important to understand some of its internals.
+
+### 5.4.1 A process is sequential
+
+***Although multiple processes may run in parallel, a single process is always sequential*** — it either runs some code or waits for a message. If many processes send messages to a single process, that single process can significantly affect overall throughput.
+
+```elixir
+defmodule Server do
+	def start do
+		spawn(fn -> loop() end)
+	end
+	
+	def send_msg(server, message) do
+		send(server, {self(), message})
+		receive do
+			{:response, response} -> response
+		end		
+	end
+	
+	def loop do
+		receive do
+			{caller, message} -> Process.sleep(1000)
+			send(caller, {:response, message})
+		end		
+		loop()
+	end
+end
+```
+
+The echo server can handle only one message per second. Because all other processes depend on the echo server, they’re constrained by its throughput. Once you identify the bottleneck, you should try to optimize the process internally. ***The goal is to make the server handle messages at least as fast as they arrive.***
+
+If you can't make message handling fast enough, ***you can try to split the server into multiple processes, effectively parallelizing the original work and hoping that doing so will boost performance on a multicore system.*** This should be your last resort, though. Parallelization isn't a remedy for a poorly structured algorithm.
+
+### 5.4.2 Unlimited process mailboxes
+
+If a process constantly falls behind, meaning messages arrive faster than the process can handle them, the mailbox will constantly grow and increasingly consume memory. Single slow process may cause an entire system to crash by consuming all the available memory. large mailbox contents cause performance slowdowns.
+
+For each server process, ***you should introduce a match-all receive clause that deals with unexpected kinds of messages.*** Typically, you'll log that a process has received the unknown message, and do nothing else about it:
+
+```elixir
+def loop
+	receive
+        {:message, msg} -> do_something(msg)
+        other -> log_unknown_message(other)
+	end
+	
+	loop()
+end
+```
+
+### 5.4.3 Shared-nothing concurrency
+
+Processes share no memory. Thus, sending a message to another process results in a deep copy of the message contents:
+
+```elixir
+send(target_pid, data) #Deep-copied
+```
+
+closing on a variable from a spawn also results in deep-copying the closed variable:
+
+```elixir
+spawn(fn -> some_fun(data) end)	#Result in a deep copy of the data variable
+```
+
+Deep-copying is an in-memory operation, so it should be reasonably fast, and occasionally sending a big message shouldn't present a problem. But having many processes frequently send big messages may affect system performance.
+
+***A special case where deep-copying doesn't take place involves binaries (including strings) that are larger than 64 bytes.*** This can be useful when you need to send information to many processes, and the processes don’t need to decode the string.
+
+You may wonder about the purpose of shared-nothing concurrency.
+
+- First, it simplifies the code of each individual process. Because processes don't share memory, you don't need complicated synchronization mechanisms such as locks and mutexes.
+- Another benefit is overall stability: one process can't compromise the memory of another. This in turn promotes the integrity and fault-tolerance of the system.
+- Finally, shared-nothing concurrency makes it possible to implement an efficient garbage collector. Because processes share no memory, garbage collection can take place on a process level.
+
+> 64 bytes보다 크면 deep-copy 안함(프로세스 내부에서 garbage collection 구현하기 위해서)
+
+### 5.4.4 Scheduler inner workings
+
+Each BEAM scheduler is in reality an OS thread that manages the execution of BEAM processes.
+
+In general, you can assume that there are `n` schedulers that run `m` processes, with `m` most often being significantly larger than `n`. This is called m:_n_threading.
+
+Internally, each scheduler maintains a run queue, which is something like a list of BEAM processes it's responsible for. Each process gets a small execution window, after which it's preempted and another process is executed. The execution window is approximately 2,000 function calls (internally called reductions).
+
+> preempted : 선매권에 의하여 획득하다.
+>
+> n개의 스케줄러가 m개의 프로세스 관리 -> 1개의 스케줄러가 x개의 프로세서 관리하는데 스캐줄러가 n개 있음. x*n=m
+
+There are some special cases when a process will implicitly yield execution to the scheduler before its execution time is up. The most notable situation is when using `receive`. Another example is a call to the `Process.sleep/1` function. In both cases, the process is suspended, and the scheduler can run other processes.
+
+Another important case of implicit yielding involves I/O operations, which are internally executed on separate threads called `async` threads. ***When issuing an I/O call, the calling process is preempted, and other processes get the execution slot. After the I/O operation finishes, the scheduler resumes the calling process.***
+
+***A great benefit of this is that your I/O code looks synchronous, while under the hood it still runs asynchronously.*** By default, BEAM fires up 10 async threads, but you can change this via the +A n Erlang flag.

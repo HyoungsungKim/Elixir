@@ -190,3 +190,108 @@ There are many differences between ServerProcess and GenServer, but a couple poi
 
 ### 6.2.4 Handling plain messages
 
+In ServerProcess, notice that you don't send the plain request payload to the server process; you include
+additional data, such as the request type and the caller for call requests.
+
+`GenServer` uses a similar approach, using :`$gen_cast` and :`$gen_call` atoms to decorate cast and call messages. You don't need to worry about the exact format of those messages, but it's important to understand that GenServer internally uses particular message formats and handles those messages in a specific way. ***It's important to understand that GenServer internally uses particular message formats and handles those messages in a specific way.***
+
+Occasionally you may need to handle messages that aren't specific to GenServer . For example, imagine that you need to do a periodic cleanup of the server process state. You can use the Erlang function `:timer.send_interval/2`, which periodically sends a message to the caller process. Because this message isn't a GenServer-specific message, it's not treated as a `cast` or a `call`. Instead, for such plain messages, GenServer calls the `handle_info/2` callback, giving you a chance to do something with the message.
+
+```elixir
+iex(1)> defmodule KeyValueStore do
+	use GenServer
+	def init(_) do
+		:timer.send_interval(5000, :cleanup)
+		{:ok, %{}}
+	end
+	
+	def handle_info(:cleanup, state) do
+		IO.puts "Performing cleanup.."
+		{:noreply, state}
+	end
+end
+```
+
+### 6.2.5 Other GenServer feature
+
+#### Compile-time checking
+
+One problem with the callbacks mechanism is that it's easy to make a subtle mistake when defining a callback function.
+
+```elixir
+defmodule EchoServer do
+	@impl GenServer
+	def handle_call(some_request, server_state) do
+		{:reply, some_request, server_state}
+	end
+end
+```
+
+Issuing a call caused the server to crash with an error that no `handle_call/3` clause is provided, although the clause is listed in the module. What happened? If you look closely at the definition of EchoServer, you'll see that you defined `handle_call/2`, while GenServer requires `handle_call/3 `.
+
+> 호출 할 때 모듈끼리 같은 이름의 함수가 존재 하면 @으로 어떤 모듈의 함수 구현인지 특정해줌
+
+You can get a compile-time warning here if you tell the compiler that the function being defined is supposed to satisfy a contract by some behaviour. To do this, you need to provide the `@impl` module attribute immediately before the first clause of the call-back function:
+
+***It's a good practice to always specify the @impl attribute for every callback function you define in your modules.***
+
+#### Name Registration
+
+Recall from chapter 5 that a process can be registered under a local name (an atom), where local means the name is registered only in the currently running BEAM instance. ***This allows you to create a singleton process that you can access by name without needing to know its pid.***
+
+Local registration is an important feature because it supports patterns of fault-tolerance and distributed systems. You'll see exactly how this works in later chapters, but it's worth mentioning that you can provide the process name as an option to `GenServer.start`:
+
+```elixir
+GenServer.start(CallbackModule, init_parm, name: :some_name)
+#name: :some_name -> register the process under a name
+GenServer.call(:some_name, ...)
+GenServer.cast(:some_name, ...)
+```
+
+***The most frequent approach is to use the same name as the module name.***
+
+> 지금까지는 GenServer.start() -> 매개변수 없이 사용 했음
+
+```elixir
+defmodule KeyValueStore do
+	use GenServer
+	def start() do
+		GenServer.start(KeyValueStore, nil, name: KeyValueStore)
+	end
+	
+	def put() do
+		GenserVer.cast(__MODULE__, {:put, key, value})
+	end
+end
+```
+
+#### Stopping The Server
+
+- `{:ok, initial_state}` from `init/1`
+- `{:reply, response, new_state}` from `handle_call/3`
+- `{:noreply, new_state}` from `handle_cast/2` and `handle_info/2`
+
+There are additional possibilities, the most important one being the option to stop the server process.
+
+In `init/1`, you can decide against starting the server. In this case, you can either return `{:stop, reason}` or `:ignore`. ***In both cases, the server won't proceed with the loop, and will instead terminate.***
+
+If `init/1` returns `{:stop, reason}`, the result of `start/2` will be `{:error, reason}`  In contrast, if `init/1` returns `:ignore`, the result of `start/2` will also be `:ignore`. The difference between these two return values is in their intention.
+
+- You should opt for `{:stop, reason}` when you can't proceed further due to some error.
+- In contrast, `:ignore` should be used when stopping the server is the normal course of action.
+- Returning `{:stop, reason, new_state}` from `handle_*` callbacks causes GenServer to stop the server process.
+- If the termination is part of the standard workflow, you should use the atom `:normal` as the stoppage reason.
+- If you're in `handle_call/3` and also need to respond to the caller before terminating, you can return `{:stop, reason, response, new_state}`. 
+
+***You may wonder why you need to return a new state if you're terminating the process.*** The reason is that just before the termination, ***GenServer calls the callback function `terminate/2`, sending it the termination reason and the final state of the process.*** This can be useful if you need to perform cleanup. Finally, you can also stop the server process by invoking `GenServer.stop/3` from the client process. This invocation will issue a synchronous request to the server. The behaviour will handle the stop request itself by stopping the server process.
+
+### 6.2.6 Process lifecycle
+
+It's important to always be aware of how GenServer-powered processes tick and where (in which process) various functions are executed.
+
+> ***Figure 6.1 is very clear!!!***
+
+### 6.2.7 OTP-compliant processes
+
+For various reasons, once you start building production systems, ***you should avoid using plain processes started with spawn. Instead, all of your processes should be so-called OTP-compliant processes.*** Such processes adhere to OTP conventions, they can be used in supervision trees (described in chapter 9), and errors in those processes are logged with more details.
+

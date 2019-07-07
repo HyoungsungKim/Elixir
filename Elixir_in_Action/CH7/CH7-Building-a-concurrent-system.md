@@ -50,3 +50,108 @@ end
 ### 7.2.2 Writing tests
 
 ***Now that the code is organized in the mix project, you can write automated tests.*** The testing framework for Elixir is called ex_unit , and it's included in the Elixir distribution. Running tests is as easy as invoking mix test . All you need to do is write the test code.
+
+```elixir
+defmodule TodoCacheTest do
+	use EnUnit.case
+	
+	test "server_process" do
+        {:ok, cache} = Todo.Cache.start()
+        bob_pid = Todo.Cache.server_process(cache, "bob")
+
+        assert bob_pid != Todo.Cache.server_process(cache, "alice")
+        assert bob_pid == Todo.Cache.server_process(cache, "bob")
+	end
+end
+```
+
+Take note of the file location and the name. A test file must reside in the test folder, and its name must end with `_test.exs` to be included in the test execution. As explained in chapter 2, ***the .exs extension stands for Elixir script, and it's used to indicate that a file isn't compiled to disk.*** Instead, mix will interpret this file every time the tests are executed.
+
+### 7.2.3 Analyzing process dependencies
+
+Let's reflect a bit on the current system. You've developed support for managing many to-do list instances, and the end goal is to use this infrastructure in an HTTP server. In the Elixir/Erlang world, HTTP servers typically use a separate process for each request. ***Thus, if you have many simultaneous end users, you can expect many BEAM processes accessing your to-do cache and to-do servers.***
+
+The first point identifies a possible source of a bottleneck. Because you have only one to-do cache process, you can handle only one `server_process` request simultaneously, regardless of how many CPU resources you have.
+
+## 7.3 Persisting data
+
+### 7.3.1 Encoding and persisting
+
+To encode an arbitrary Elixir/Erlang term, you use the `:erlang.term_to_binary/1` function, which accepts an Erlang term and returns an encoded byte sequence as a binary value.
+
+The result can be stored to disk, retrieved at a later point, and decoded to an Erlang term with the inverse function `:erlang.binary_to _term/1 .`
+
+```elixir
+defmodule Todo.Database do
+	use GenServer
+	
+	@db_folder "./persist"
+	
+	def start do
+		GenServer.start(__MODULE__, nil, name: __MODULE__)
+	end
+	
+	def store(key, data) do
+		GenServer.cast(__MODULE__, {:store, key, data})
+	end
+	
+	def get(key) do
+		GenServer.call(__MODULE__, {:get, key})
+	end
+	
+	def init(_) do
+		File.mkdir_p!(@db_folder)
+		{:ok, nil}
+	end
+	
+	def handle_cast({:store, key, data}, state) do
+		key
+		|> file_name()
+		|> File.write!(:relang.term_to_binary(data))
+		{:noreply, state}
+	end
+	
+	def handle_call({:get, key}, _, state) do
+		data = case File.read(file_name(key)) do
+			{:ok, contents} -> :erlang.binary_to_term(contents)
+			_->nil
+		end
+		
+		{:reply, data, state}
+	end
+	
+	defp file_name(key) do
+		Path.join(@db_folder, to_string(key))
+	end
+end
+```
+
+It's worth noting that the `store` request is a cast, whereas `get` is a call. In this implementation, I decided to turn `store` into a cast ***because the client isn't interested in a response.*** Using casts promotes scalability of the system because the caller issues a request and goes about its business.
+
+***A huge downside of a cast is that the caller can't know whether the request was successfully handled.*** In fact, the caller can't even be sure that the request reached the target process. This is a property of casts. Casts promote overall availability by allowing client processes to move on immediately after a request is issued. But this comes at the cost of consistency, because you can't be confident about whether a request has succeeded.
+
+During initialization, you use `File.mkdir_p!/1` to create the specified folder if it doesn't exist. ***The exclamation mark at the end of the name indicates a function that raises an error if the folder can't be created for some reason.*** The data is stored by encoding the given term to the binary and then persisting it to the disk. Data fetching is an inverse of storing. If the given file doesn't exist on the disk, you return nil.
+
+### 7.3.2 Using the database
+
+With the database process in place, it's time to use it from your existing system. You have to do three things:
+
+1. Ensure that a database process is started
+2. Persist the list on every modification
+3. Try to fetch the list from disk during the first retrieval
+
+#### Storing the data
+
+Next you have to persist the list after it's modified. Obviously, this must be done from the to-do server. But remember that the database's `store` request requires a key. For this purpose, you'll use the to-do list name. As you may recall, this name is currently maintained only in the to-do cache, so you must propagate it to the to-do server as well. This means extending the to-do server state to be in the format `{list_name, todo_list}`. The code isn't shown here, but these are the corresponding changes:
+
+#### Reading the data
+
+```elixir
+defmodule Todo.Server do
+	def init(name) do
+		{:ok, {name, Todo.Database.get(name) || Todo.List.new()}}
+	end
+end
+```
+
+Here you try to fetch the data from the database, and you resort to the empty list if there's nothing on disk.

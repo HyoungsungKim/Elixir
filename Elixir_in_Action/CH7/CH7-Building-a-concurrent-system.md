@@ -154,4 +154,63 @@ defmodule Todo.Server do
 end
 ```
 
-Here you try to fetch the data from the database, and you resort to the empty list if there's nothing on disk.
+Recall that `GenServer.start` returns only after the process has been initialized. Consequently, a long-running `init/1` function will cause the creator process to block. ***In this case, a long initialization of a to-do server will block the cache process, which is used by many clients.***
+
+To circumvent(피해 가다) this problem, there's a simple trick. You can use `init/1` to send yourself an internal message and then initialize the process state in the corresponding `handle_info` callback:
+
+```elixir
+def init(params) do
+	send(self(), :real_init)	#Sends itself a message
+	{:ok, nil}					#You are not really initialized here
+end
+
+def handle_info(:real_inti, state) do
+	#Performs a long initialization
+end
+```
+
+By sending yourself a message, you place a request in your own message queue. Then you return immediately, which makes the corresponding `GenServer.start` return, and the creator process can continue running other code. In the meantime, the process loop starts and immediately handles the first message, which is `:real_init`.
+
+This technique will generally work as long as your process isn't registered under a local name. If the process isn't registered, someone has to know its pid to send it a message, and that pid will only be known after `init/1` has finished. Hence, you can be sure that the message you send to yourself is the first one being handled. But if the process is registered, there's a chance that someone else will put the message in the queue first by referencing the process via registered name. This can happen because at the moment `init/1` is invoked, the process is already registered under the name (due to the inner workings of GenServer ).
+
+There are a couple of workarounds for this problem, the simplest one being not using the `:name` option and opting instead for manual registration of the process in the `init/1` callback after the message to self is sent:
+
+```elixir
+def init(params) do
+	send(self(), :real_init)
+	register(self(), :some_name)
+end
+```
+
+> Difficult... 뭔 말인지 하나도 모르겠네
+
+### 7.3.3 Analyzing the system
+
+The `store` request may not seem problematic from the client-side perspective, because it's an asynchronous cast. A client issues a `store` request and then goes about its business. But if requests to the database come in faster than they can be handled, the process mailbox will grow and increasingly consume memory.
+
+Ultimately, the entire system may experience significant problems, resulting in the possible termination of the BEAM OS process. The `get` request can cause additional problems. It's a synchronous call, so the to-do server waits while the database returns the response. ***While it's waiting for the response, this to-do server can't handle new messages.***
+
+- What's worse, because this is happening from initialization, the cache process is blocked until the list data is retrieved, which ultimately may render the entire system useless under a heavier load.
+
+It's worth repeating that the synchronous call won't block indefinitely.
+
+-  ***Recall that `GenServer.call` has a default timeout of five seconds, and you can configure it to be less for better responsiveness.***
+- Still, when a request times out, it isn't removed from the receiver's mailbox. A request is a message that's placed in the receiver's mailbox.
+
+A timeout means you give up waiting on the response, but the message remains in the receiver's mailbox and will be processed at some point.
+
+### 7.3.4 Addressing the process bottleneck
+
+#### Bypassing The Process
+
+***The simplest possible way to eliminate the process bottleneck is to bypass the process.***
+
+There are various reasons for running a piece of code in a dedicated server process:
+
+- The code must manage a long-living state.
+- The code handles a kind of a resource that can and should be reused, such as a TCP connection, database connection, file handle, pipe to an OS process, and so on.
+- ***A critical section of the code must be synchronized. Only one process may run this code in any moment.***
+
+If none of these conditions are met, you probably don't need a process and can run the code in client processes, which will completely eliminate the bottleneck and promote parallelism and scalability. In the current code, you could indeed store to the file directly from the to-do server process. All operations on the same list are serialized in the same process, so there are no race conditions. But the problem with this approach is that concurrency is unbound. If you have 100,000 simultaneous clients, then you'll issue that many concurrent I/O operations, which may negatively affect the entire system.
+
+#### Handling requests concurrently

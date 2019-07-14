@@ -213,4 +213,23 @@ There are various reasons for running a piece of code in a dedicated server proc
 
 If none of these conditions are met, you probably don't need a process and can run the code in client processes, which will completely eliminate the bottleneck and promote parallelism and scalability. In the current code, you could indeed store to the file directly from the to-do server process. All operations on the same list are serialized in the same process, so there are no race conditions. But the problem with this approach is that concurrency is unbound. If you have 100,000 simultaneous clients, then you'll issue that many concurrent I/O operations, which may negatively affect the entire system.
 
-#### Handling requests concurrently
+Always keep in mind that multiple processes run concurrently, whereas a single process handles requests sequentially. If
+computations can safely run in parallel, you should consider running them in separate processes. In contrast, if an operation must be synchronized, you'll want to run it in a single process.
+
+## 7.4 Reasoning with processes
+
+Another way to look at server processes is to think of them as services. Each process is like a small service that's responsible for a single task. In the to-do example, there's a to-do server that handles a distinct to-do list. Different lists are handled by different to-do servers, which makes the system more efficient. ***But a single list is always handled by the same process, which eliminates race conditions and keeps consistency.*** The to-do cache is a service that maps to-do names to corresponding to-do servers. Finally, the database process is a service that handles database requests. Internally, it distributes the work over a limited pool of workers, making sure the same item is always handled by the same worker.
+
+Those services (processes) are mostly independent, but in some cases they need to cooperate. For this purpose, you can use calls and casts.
+
+- Obviously, when a client needs a response, you should use calls.
+- But even when a response isn't needed, calls can sometimes be a better fit. The main problem with a `cast` is that it's a fire-and-forget kind of request, ***so the caller doesn't get any guarantees.*** You can't be sure that the request has reached the target, and you most certainly don't know about its outcome.
+
+Essentially, both types have benefits and downsides.
+
+- Casts promote system responsiveness (because a caller isn't blocked) at the cost of reduced consistency (because a caller doesn't know about the outcome of the request).
+- On the other hand, calls promote consistency (a caller gets a response) but reduce system responsiveness (a caller is blocked while waiting for a response).
+- Finally, calls can also be used to apply back-pressure to client processes. Because a call blocks a client, it prevents the client from generating too much work. The client becomes synchronized with the server and can never produce more work than the server can handle.
+- In contrast, ***if you use casts, clients may overload the server, and requests may pile up in the message box and consume memory.*** Ultimately, you may run out of memory, and the entire VM may be terminated.
+
+Which approach is a better fit depends on the specific situation and circumstances. If you're unsure, it's probably better to start with a call, because it's more consistent. You can then consider switching to casts in places where you establish that calls hurt performance and system responsiveness.
